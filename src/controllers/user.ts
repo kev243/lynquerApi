@@ -1,6 +1,12 @@
 import { Request, Response } from "express";
-import { validateEmail, validateLength } from "../utils/validation";
+import {
+  generateCode,
+  validateEmail,
+  validateLength,
+} from "../utils/validation";
 import User from "../models/user.model";
+import Code from "../models/code";
+import { sendVerificationEmail } from "../utils/resend";
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -45,6 +51,18 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     // Sauvegarde de l'utilisateur
     await user.save();
 
+    //suppression du code existant
+    await Code.deleteMany({ user: user._id });
+
+    const code = generateCode(5);
+
+    const newCode = await new Code({
+      code,
+      user: user._id,
+    }).save();
+
+    sendVerificationEmail(user.email, user.name, code);
+
     // Réponse en cas de succès
     res.status(201).json({
       message:
@@ -52,6 +70,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error: any) {
     console.error("Error during registration:", error);
+
     // Gestion des erreurs
     const statusCode = error.statusCode || 500;
     const message = error.message || "Server error";

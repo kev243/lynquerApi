@@ -71,10 +71,16 @@ const UserSchema: Schema = new Schema<IUser>(
   }
 );
 
-// Middleware : Générer automatiquement le username à partir de name
+// Middleware : Générer automatiquement le username à partir de l'email
 UserSchema.pre<IUser>("save", async function (next) {
-  if (!this.isModified("name")) return next(); // Ne génère pas un nouveau username si name n'est pas modifié
-  this.username = this.name.replace(/\s+/g, "").toLowerCase(); // Supprime les espaces et met en minuscule
+  if (!this.isModified("email")) return next(); // Ne génère pas un nouveau username si l'email n'est pas modifié
+
+  // Extraire la partie avant le '@' de l'email
+  const emailPrefix = this.email.split("@")[0]; // Partie avant le '@'
+
+  // Assignation du username avec le préfixe de l'email en minuscule
+  this.username = emailPrefix.toLowerCase();
+
   next();
 });
 

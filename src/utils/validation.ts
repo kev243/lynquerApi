@@ -13,3 +13,13 @@ export const validateLength = (
 ): boolean => {
   return !(text.length > max || text.length < min);
 };
+
+export const generateCode = (length: number): string => {
+  let code = "";
+  const schema = "0123456789";
+
+  for (let i = 0; i < length; i++) {
+    code += schema.charAt(Math.floor(Math.random() * schema.length));
+  }
+  return code;
+};
