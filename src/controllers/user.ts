@@ -5,7 +5,7 @@ import {
   validateLength,
 } from "../utils/validation";
 import User from "../models/user.model";
-import Code from "../models/code";
+import Code from "../models/code.model";
 import { sendVerificationEmail } from "../utils/resend";
 
 export const register = async (req: Request, res: Response): Promise<void> => {
@@ -76,5 +76,58 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const message = error.message || "Server error";
     res.status(statusCode).json({ message });
     return;
+  }
+};
+
+export const validateCode = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { code } = req.body;
+
+    if (!code) {
+      res.status(400).json({ message: "Verification code is required" });
+      return;
+    }
+
+    // Recherche le code dans la base de données
+    const Dbcode = await Code.findOne({ code });
+
+    if (!Dbcode) {
+      res.status(400).json({ message: "Verification code not found" });
+      return;
+    }
+
+    // Vérifie si le code a expiré
+    if (Dbcode.expiresAt < new Date()) {
+      res.status(400).json({ message: "Verification code has expired" });
+      return;
+    }
+
+    // Récupére l'utilisateur lié au code
+    const user = await User.findById(Dbcode.user);
+
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    if (user.verified) {
+      res.status(400).json({ message: "This email is already activated" });
+      return;
+    }
+
+    // Met à jour le statut de l'utilisateur
+    user.verified = true;
+    await user.save();
+
+    // Supprime le code après utilisation
+    await Code.deleteOne({ _id: Dbcode._id });
+
+    res.status(200).json({ message: "User verified successfully" });
+  } catch (error) {
+    console.error("Error in validateCode:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
