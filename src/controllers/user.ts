@@ -7,6 +7,8 @@ import {
 import User from "../models/user.model";
 import Code from "../models/code.model";
 import { sendVerificationEmail } from "../utils/resend";
+import bcrypt from "bcrypt";
+import { generateToken } from "../utils/token";
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -125,9 +127,73 @@ export const validateCode = async (
     // Supprime le code après utilisation
     await Code.deleteOne({ _id: Dbcode._id });
 
+    // Générer un token pour l'utilisateur
+    const token = generateToken({ id: user._id });
+
+    // Configurer le cookie avec le token
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // Utilise HTTPS en production
+      sameSite: "strict", // Protège contre les attaques CSRF
+    });
+
     res.status(200).json({ message: "User verified successfully" });
   } catch (error) {
     console.error("Error in validateCode:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const login = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, password } = req.body;
+
+    // Vérification des champs requis
+    if (!email || !password) {
+      res.status(400).json({ message: "Please fill in all required fields." });
+      return;
+    }
+
+    // Recherche de l'utilisateur dans la base de données
+    const user = await User.findOne({ email });
+    if (!user) {
+      res.status(404).json({ message: "User not found." });
+      return;
+    }
+
+    // Vérification du mot de passe
+    const passwordIsMatch = await bcrypt.compare(password, user.password);
+    if (!passwordIsMatch) {
+      res.status(401).json({ message: "Incorrect password." });
+      return;
+    }
+
+    // Génération d'un token
+    const token = generateToken({ id: user._id });
+
+    // Configuration des cookies
+    res.cookie("token", token, {
+      httpOnly: true, // Rend le cookie inaccessible depuis le JavaScript client
+      secure: process.env.NODE_ENV === "production", // Utilise HTTPS en production
+      sameSite: "strict", // Protège contre les attaques CSRF
+    });
+
+    // Réponse de succès
+    res.status(200).json({
+      message: "Login successful.",
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        verified: user.verified,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error during login:", error);
+
+    // Réponse d'erreur générique
+    res.status(500).json({
+      message: "Server error. Please try again later.",
+    });
   }
 };
