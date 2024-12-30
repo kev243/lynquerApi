@@ -21,7 +21,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
     // Validation de l'email
     if (!validateEmail(email)) {
-      console.log("Invalid email address");
       res.status(400).json({ message: "Invalid email address" });
       return;
     }
@@ -53,17 +52,15 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     // Sauvegarde de l'utilisateur
     await user.save();
 
-    //suppression du code existant
-    await Code.deleteMany({ user: user._id });
+    // Générer un token pour l'utilisateur
+    const token = generateToken({ id: user._id });
 
-    const code = generateCode(5);
-
-    const newCode = await new Code({
-      code,
-      user: user._id,
-    }).save();
-
-    sendVerificationEmail(user.email, user.name, code);
+    // Configurer le cookie avec le token
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // Utilise HTTPS en production
+      sameSite: "strict", // Protège contre les attaques CSRF
+    });
 
     // Réponse en cas de succès
     res.status(201).json({
