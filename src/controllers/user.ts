@@ -1,17 +1,14 @@
 import { Request, Response } from "express";
-import {
-  generateCode,
-  validateEmail,
-  validateLength,
-} from "../utils/validation";
+import { validateEmail, validateLength } from "../utils/validation";
 import User from "../models/user.model";
 import Code from "../models/code.model";
-import { sendVerificationEmail } from "../utils/resend";
+import Token from "../models/token.model";
+import { sendResetUrlPassoword } from "../utils/resend";
 import bcrypt from "bcrypt";
 import { generateToken } from "../utils/token";
 import { AuthenticatedRequest } from "../middlewares/auth";
-// import jwt from "jsonwebtoken";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import crypto from "crypto";
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -27,6 +24,12 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({ message: "Invalid email address" });
       return;
     }
+    // Validation du password
+    if (password.length < 5) {
+      res.status(400).json({ message: "Password must be up to 6 characters" });
+      return;
+    }
+
     // Vérification si l'email existe déjà
     const existingEmail = await User.findOne({ email });
     if (existingEmail) {
@@ -128,6 +131,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Validation de l'email
+    if (!validateEmail(email)) {
+      res.status(400).json({ message: "Invalid email address" });
+      return;
+    }
+
     // Recherche de l'utilisateur dans la base de données
     const user = await User.findOne({ email });
     if (!user) {
@@ -168,8 +177,120 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-//fonction qui permet d'envoyer
+//fonction qui permet d'envoyer l'email d'instruction
 export const forgotPassword = async (
   req: Request,
   res: Response
-): Promise<void> => {};
+): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    // Validation de l'e-mail
+    if (!email || !validateEmail(email)) {
+      res.status(400).json({ message: "Invalid or missing email" });
+      return;
+    }
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      res.status(404).json({ message: "user not found with email" });
+      return;
+    }
+
+    // Suppression des anciens tokens associés à cet utilisateur
+    await Token.deleteMany({ user: user._id });
+
+    // Création d'un nouveau reset token
+    const resetToken = crypto.randomBytes(32).toString("hex") + user._id;
+
+    //hash token before saving to BD
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    await new Token({
+      user: user._id,
+      token: hashedToken,
+    }).save();
+
+    // Construction de l'URL de réinitialisation
+    const resetUrl = `${process.env.FRONTEND_URL}/resetpassword/${resetToken}`;
+
+    // Envoi de l'e-mail avec le lien de réinitialisation
+    await sendResetUrlPassoword(email, user.name, resetUrl);
+
+    res.status(200).json({ message: "Reset email sent successfully" });
+    return;
+  } catch (error: any) {
+    console.error("Error during login:", error);
+
+    // Réponse d'erreur générique
+    res.status(500).json({
+      message: "Server error. Please try again later.",
+    });
+    return;
+  }
+};
+
+export const resetPassword = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { password } = req.body;
+    const { resetToken } = req.params;
+
+    // Validation de la présence du mot de passe et du token
+    if (!password || password.length < 5) {
+      res
+        .status(400)
+        .json({ message: "Password must be at least 5 characters long." });
+      return;
+    }
+    if (!resetToken) {
+      res.status(400).json({ message: "Reset token is required." });
+      return;
+    }
+
+    // Hashage du token reçu pour comparaison avec la base de données
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    // Recherche du token dans la base de données avec une vérification de son expiration
+    const userToken = await Token.findOne({
+      token: hashedToken,
+      expiresAt: { $gt: Date.now() }, // Vérifie que le token n'est pas expiré
+    });
+
+    if (!userToken) {
+      res.status(404).json({ message: "Invalid or expired token." });
+      return;
+    }
+
+    // Recherche de l'utilisateur associé au token
+    const user = await User.findById(userToken.user);
+    if (!user) {
+      res.status(404).json({ message: "User not found." });
+      return;
+    }
+
+    // Mise à jour du mot de passe de l'utilisateur
+    user.password = password;
+    await user.save();
+
+    // Suppression du token utilisé après un reset réussi
+    await Token.deleteOne({ _id: userToken._id });
+
+    res.status(200).json({ message: "Password reset successfully." });
+  } catch (error) {
+    console.error("Error during password reset:", error);
+
+    // Réponse d'erreur générique
+    res.status(500).json({
+      message: "Server error. Please try again later.",
+    });
+  }
+};
