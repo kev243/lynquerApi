@@ -10,7 +10,7 @@ if (!TOKEN_SECRET) {
 }
 export const generateToken = (payload: Object): string => {
   return jwt.sign(payload, TOKEN_SECRET as string, {
-    expiresIn: "7d",
+    expiresIn: "10d",
   });
 };
 

@@ -9,6 +9,9 @@ import Code from "../models/code.model";
 import { sendVerificationEmail } from "../utils/resend";
 import bcrypt from "bcrypt";
 import { generateToken } from "../utils/token";
+import { AuthenticatedRequest } from "../middlewares/auth";
+// import jwt from "jsonwebtoken";
+import jwt, { JwtPayload } from "jsonwebtoken";
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -52,7 +55,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     // Sauvegarde de l'utilisateur
     await user.save();
 
-    // Générer un token pour l'utilisateur
     const token = generateToken({ id: user._id });
 
     // Configurer le cookie avec le token
@@ -62,10 +64,18 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       sameSite: "strict", // Protège contre les attaques CSRF
     });
 
-    // Réponse en cas de succès
+    // Réponse en cas de succès avec les informations de l'utilisateur
     res.status(201).json({
       message:
-        "Registration successfully. Please activate your email to proceed.",
+        "Registration successful. Please activate your email to proceed.",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        username: user.username,
+        verified: user.verified,
+        createdAt: user.createdAt,
+      },
     });
   } catch (error: any) {
     console.error("Error during registration:", error);
@@ -78,66 +88,33 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-export const validateCode = async (
-  req: Request,
+export const validateToken = async (
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) {
+    res.status(401).json({ message: "Unauthorised" });
+    return;
+  }
   try {
-    const { code } = req.body;
+    const decoded = jwt.verify(
+      token,
+      process.env.TOKEN_SECRET || ""
+    ) as JwtPayload;
 
-    if (!code) {
-      res.status(400).json({ message: "Verification code is required" });
+    // Vérifie si le champ exp (expiration) existe et s'il est valide
+    if (decoded.exp && Date.now() >= decoded.exp * 1000) {
+      res.status(401).json({ message: "Unauthorized: Token has expired" });
       return;
     }
 
-    // Recherche le code dans la base de données
-    const Dbcode = await Code.findOne({ code });
-
-    if (!Dbcode) {
-      res.status(400).json({ message: "Verification code not found" });
-      return;
-    }
-
-    // Vérifie si le code a expiré
-    if (Dbcode.expiresAt < new Date()) {
-      res.status(400).json({ message: "Verification code has expired" });
-      return;
-    }
-
-    // Récupére l'utilisateur lié au code
-    const user = await User.findById(Dbcode.user);
-
-    if (!user) {
-      res.status(404).json({ message: "User not found" });
-      return;
-    }
-
-    if (user.verified) {
-      res.status(400).json({ message: "This email is already activated" });
-      return;
-    }
-
-    // Met à jour le statut de l'utilisateur
-    user.verified = true;
-    await user.save();
-
-    // Supprime le code après utilisation
-    await Code.deleteOne({ _id: Dbcode._id });
-
-    // Générer un token pour l'utilisateur
-    const token = generateToken({ id: user._id });
-
-    // Configurer le cookie avec le token
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // Utilise HTTPS en production
-      sameSite: "strict", // Protège contre les attaques CSRF
-    });
-
-    res.status(200).json({ message: "User verified successfully" });
+    res.status(200).json({ message: "Authorised" });
+    return;
   } catch (error) {
-    console.error("Error in validateCode:", error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(401).json({ message: "Unauthorised" });
+    return;
   }
 };
 
@@ -164,6 +141,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ message: "Incorrect password." });
       return;
     }
+    //suppression du code
+    await Code.deleteMany({ user: user._id });
 
     // Génération d'un token
     const token = generateToken({ id: user._id });
@@ -178,12 +157,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     // Réponse de succès
     res.status(200).json({
       message: "Login successful.",
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-        verified: user.verified,
-      },
     });
   } catch (error: any) {
     console.error("Error during login:", error);
@@ -194,3 +167,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     });
   }
 };
+
+//fonction qui permet d'envoyer
+export const forgotPassword = async (
+  req: Request,
+  res: Response
+): Promise<void> => {};
