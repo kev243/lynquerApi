@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import cors from "cors";
 import { connectDB } from "./db";
 import userRouter from "./src/routes/user.route";
+import linkRouter from "./src/routes/link.route";
+import cookieParser from "cookie-parser";
 
 dotenv.config();
 
@@ -41,6 +43,7 @@ connectDB();
 app.use(cors(corsOptions));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use(cookieParser());
 
 app.get("/", (req: Request, res: Response) => {
   res.send("Hello, TypeScript API For Lynquer App!");
@@ -48,6 +51,7 @@ app.get("/", (req: Request, res: Response) => {
 
 //les Endpoints V1
 app.use("/api/v1/user", userRouter);
+app.use("/api/v1/link", linkRouter);
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

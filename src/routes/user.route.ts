@@ -3,6 +3,7 @@ import {
   forgotPassword,
   login,
   register,
+  resetPassword,
   validateToken,
 } from "../controllers/user";
 import express from "express";
@@ -14,5 +15,6 @@ router.post("/register", register);
 router.post("/login", login);
 router.post("/validateToken", validateToken);
 router.post("/forgotPassword", forgotPassword);
+router.post("/resetPassword/:resetToken", resetPassword);
 
 export default router;
