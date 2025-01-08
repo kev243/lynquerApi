@@ -15,7 +15,7 @@ const router = express.Router();
 router.post("/create", authUser, createLink);
 router.get("/all", authUser, getLinks);
 router.delete("/delete/:id", authUser, deleteLink);
-router.patch("/update/:id", authUser, updateLink);
+router.put("/update/:id", authUser, updateLink);
 router.patch("/visible/:id", authUser, updateVisibility);
 router.put("/positions", updateLinkPositions);
 router.get("/user/:username", getLinksByUsername);

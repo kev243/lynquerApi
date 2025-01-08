@@ -294,3 +294,81 @@ export const resetPassword = async (
     });
   }
 };
+
+export const getUser = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ message: "Unauthorized: Token missing" });
+      return;
+    }
+
+    const userInfo = await User.findById(user.id);
+    if (!userInfo) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    res.status(200).json({
+      message: "User infos",
+      user: {
+        id: userInfo._id,
+        name: userInfo.name,
+        email: userInfo.email,
+        username: userInfo.username,
+        bio: userInfo.bio,
+        verified: userInfo.verified,
+        createdAt: userInfo.createdAt,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Mettre à jour les informations de l'utilisateur
+export const updateUser = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ message: "Unauthorized: Token missing" });
+      return;
+    }
+
+    const { name, email, bio, isPrivate, profileImageUrl } = req.body;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user.id,
+      { name, email, bio, isPrivate, profileImageUrl },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    res.status(200).json({
+      message: "User updated successfully",
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        username: updatedUser.username,
+        bio: updatedUser.bio,
+        isPrivate: updatedUser.isPrivate,
+        profileImageUrl: updatedUser.profileImageUrl,
+        verified: updatedUser.verified,
+        createdAt: updatedUser.createdAt,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
