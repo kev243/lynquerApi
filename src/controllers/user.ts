@@ -9,6 +9,15 @@ import { generateToken } from "../utils/token";
 import { AuthenticatedRequest } from "../middlewares/auth";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import crypto from "crypto";
+import axios from "axios";
+import fs from "fs";
+
+const cloudinary = require("cloudinary").v2;
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -320,6 +329,7 @@ export const getUser = async (
         email: userInfo.email,
         username: userInfo.username,
         bio: userInfo.bio,
+        profileImageUrl: userInfo.profileImageUrl,
         verified: userInfo.verified,
         createdAt: userInfo.createdAt,
       },
@@ -341,11 +351,20 @@ export const updateUser = async (
       return;
     }
 
-    const { name, email, bio, isPrivate, profileImageUrl } = req.body;
+    const { name, username, bio } = req.body;
+
+    // Vérifie si le nom d'utilisateur est déjà pris
+    if (username) {
+      const existingUser = await User.findOne({ username });
+      if (existingUser && existingUser.id.toString() !== user.id) {
+        res.status(400).json({ message: "Username is already taken" });
+        return;
+      }
+    }
 
     const updatedUser = await User.findByIdAndUpdate(
       user.id,
-      { name, email, bio, isPrivate, profileImageUrl },
+      { name, username, bio },
       { new: true, runValidators: true }
     );
 
@@ -367,6 +386,121 @@ export const updateUser = async (
         verified: updatedUser.verified,
         createdAt: updatedUser.createdAt,
       },
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Fonction de téléchargement de l'image sur Imgur
+export const uploadProfileImage = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ message: "Unauthorized: Token missing" });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ message: "No file uploaded" });
+      return;
+    }
+
+    // Vérification du type du fichier (en plus de la validation de Multer)
+    if (!req.file.mimetype.startsWith("image/")) {
+      res.status(400).json({ message: "The file must be an image" });
+      return;
+    }
+
+    const imagePath = req.file.path;
+    const imgurClientId = process.env.IMGUR_CLIENT_ID;
+
+    if (!imgurClientId) {
+      res.status(500).json({ message: "Imgur Client-ID not configured" });
+      return;
+    }
+
+    // Télécharger l'image sur Imgur
+    const response = await axios.post(
+      "https://api.imgur.com/3/image",
+      {
+        image: fs.readFileSync(imagePath, { encoding: "base64" }),
+        type: "base64",
+      },
+      {
+        headers: {
+          Authorization: `Client-ID ${imgurClientId}`,
+        },
+      }
+    );
+
+    const imageUrl = response.data.data.link;
+
+    // Supprimer le fichier temporaire après l'upload
+    fs.unlinkSync(imagePath);
+
+    // Mettre à jour l'URL de l'image du profil de l'utilisateur
+    const updatedUser = await User.findByIdAndUpdate(
+      user.id,
+      { profileImageUrl: imageUrl },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Profile image uploaded successfully",
+      profileImageUrl: imageUrl,
+    });
+  } catch (error: any) {
+    console.error("Error uploading image:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Fonction de téléchargement de l'image sur Cloudinary
+export const uploadProfileImageCloudinary = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ message: "Unauthorized: Token missing" });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ message: "No file uploaded" });
+      return;
+    }
+
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: "profile_images_lynquer",
+    });
+
+    const imageUrl = result.secure_url;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user.id,
+      { profileImageUrl: imageUrl },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Profile image uploaded successfully",
+      profileImageUrl: imageUrl,
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });

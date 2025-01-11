@@ -48,10 +48,7 @@ export const getLinks = async (
       res.status(401).json({ message: "Unauthorized: Token missing" });
       return;
     }
-    // .sort({ position: 1 }) // Trier les liens dans l'ordre croissant de position
-    const links = await Link.find({ user: user.id })
-      .sort("-createdAt") // Trier les liens dans l'ordre décroissant de date de création
-      .exec();
+    const links = await Link.find({ user: user.id }).exec();
     res.status(200).json({ links });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
