@@ -18,6 +18,6 @@ router.delete("/delete/:id", authUser, deleteLink);
 router.put("/update/:id", authUser, updateLink);
 router.patch("/visible/:id", authUser, updateVisibility);
 router.put("/positions", updateLinkPositions);
-router.get("/user/:username", getLinksByUsername);
+router.get("/:username", getLinksByUsername);
 
 export default router;

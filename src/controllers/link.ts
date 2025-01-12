@@ -206,7 +206,9 @@ export const getLinksByUsername = async (
       return;
     }
 
-    const links = await Link.find({ user: user._id });
+    const links = await Link.find({ user: user._id, visible: true })
+      .sort({ position: 1 })
+      .exec();
     res.status(200).json({ links });
   } catch (error: any) {
     res.status(500).json({ message: error.message });

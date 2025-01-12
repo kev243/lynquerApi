@@ -464,7 +464,7 @@ export const uploadProfileImage = async (
   }
 };
 
-// Fonction de téléchargement de l'image sur Cloudinary
+//Fonction de téléchargement de l'image sur Cloudinary
 export const uploadProfileImageCloudinary = async (
   req: AuthenticatedRequest,
   res: Response
